@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aviator History & Graph</title>
+<style>
+:root{color-scheme:dark;--bg:#101116;--panel:#1b1d26;--red:#ff454f;--muted:#aeb2c0;--line:#303341}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#f5f6fa;font:16px system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:24px 18px;background:linear-gradient(135deg,#36151b,#15161e);border-bottom:1px solid var(--line)}
+h1{font-size:24px;margin:0 0 6px}header p{margin:0;color:var(--muted);font-size:14px}
+main{max-width:900px;margin:auto;padding:16px;display:grid;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+h2{font-size:17px;margin:0 0 12px}
+form{display:flex;gap:8px;flex-wrap:wrap}input,button{font:inherit;border-radius:10px;padding:12px;border:1px solid var(--line)}
+input{background:#11131a;color:white;flex:1;min-width:130px}button{background:var(--red);border:0;color:white;font-weight:700;cursor:pointer}
+button.secondary{background:#343744}button.danger{background:#6f2930}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#12141b;border-radius:12px;padding:12px}.stat span{display:block;color:var(--muted);font-size:12px}.stat strong{font-size:20px}
+canvas{width:100%;height:240px;display:block;background:#12141b;border-radius:12px}
+small,.note{color:var(--muted);font-size:12px;line-height:1.5}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 6px;border-bottom:1px solid var(--line);font-size:14px}th{color:var(--muted);font-weight:500}
+.tablewrap{overflow-x:auto}.empty{color:var(--muted);text-align:center;padding:18px}
+@media(max-width:480px){.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:span 2}h1{font-size:21px}}
+</style>
+</head>
+<body>
+<header><h1>✈ Aviator History & Graph</h1><p>Your personal tracker for recorded multipliers</p></header>
+<main>
+<section class="card"><h2>Add a recorded round</h2>
+<form id="entryForm"><input id="multiplier" type="number" min="1" step="0.01" placeholder="Multiplier (e.g. 2.45)" required><button type="submit">Add result</button></form>
+<p class="note">Enter results you observed. This tracker does not predict future rounds or connect to any gambling account.</p>
+</section>
+<section class="card"><h2>Summary</h2><div class="stats"><div class="stat"><span>Rounds saved</span><strong id="count">0</strong></div><div class="stat"><span>Average</span><strong id="average">—</strong></div><div class="stat"><span>Highest</span><strong id="highest">—</strong></div></div>
+</section>
+<section class="card"><h2>Multiplier graph</h2><canvas id="graph" width="800" height="300" aria-label="Graph of recorded multipliers"></canvas><p class="note">Each point is a recorded round, in the order entered. The graph shows history only.</p></section>
+<section class="card"><h2>History</h2><div class="tablewrap"><table><thead><tr><th>#</th><th>Multiplier</th><th>Recorded at</th><th></th></tr></thead><tbody id="history"></tbody></table></div><p id="empty" class="empty">No results yet. Add your first multiplier above.</p><button id="export" class="secondary">Export CSV</button> <button id="clear" class="danger">Clear history</button></section>
+</main>
+<script>
+const KEY='aviatorHistoryGraph.v1';
+let rounds=[];
+try{rounds=JSON.parse(localStorage.getItem(KEY)||'[]');if(!Array.isArray(rounds))rounds=[];}catch(e){rounds=[];}
+const $=id=>document.getElementById(id);
+const fmt=n=>Number(n).toFixed(2)+'x';
+function save(){try{localStorage.setItem(KEY,JSON.stringify(rounds));}catch(e){}}
+function render(){
+ $('count').textContent=rounds.length;
+ $('average').textContent=rounds.length?fmt(rounds.reduce((s,r)=>s+r.value,0)/rounds.length):'—';
+ $('highest').textContent=rounds.length?fmt(Math.max(...rounds.map(r=>r.value))):'—';
+ $('history').innerHTML='';
+ rounds.slice().reverse().forEach((r,revIndex)=>{const index=rounds.length-revIndex;const tr=document.createElement('tr');
+ [index,fmt(r.value),r.time].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.appendChild(td);});
+ const td=document.createElement('td');const b=document.createElement('button');b.className='secondary';b.textContent='Delete';b.style.padding='7px 9px';b.onclick=()=>{rounds.splice(index-1,1);save();render();};td.appendChild(b);tr.appendChild(td);$('history').appendChild(tr);});
+ $('empty').style.display=rounds.length?'none':'block';draw();
+}
+function draw(){
+ const c=$('graph'),ctx=c.getContext('2d'),w=c.width,h=c.height,p={l:48,r:18,t:18,b:36};
+ ctx.clearRect(0,0,w,h);ctx.fillStyle='#12141b';ctx.fillRect(0,0,w,h);
+ if(!rounds.length){ctx.fillStyle='#aeb2c0';ctx.font='16px sans-serif';ctx.textAlign='center';ctx.fillText('Add results to see your graph',w/2,h/2);return;}
+ const vals=rounds.map(r=>r.value),max=Math.max(2,Math.ceil(Math.max(...vals)*1.1)),min=1;
+ ctx.font='12px sans-serif';ctx.strokeStyle='#303341';ctx.fillStyle='#aeb2c0';ctx.lineWidth=1;
+ for(let i=0;i<=4;i++){let y=p.t+(h-p.t-p.b)*i/4;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();ctx.textAlign='right';ctx.fillText((max-(max-min)*i/4).toFixed(1)+'x',p.l-8,y+4);}
+ const x=i=>p.l+(vals.length===1?(w-p.l-p.r)/2:i*(w-p.l-p.r)/(vals.length-1));
+ const y=v=>p.t+(max-v)*(h-p.t-p.b)/(max-min);
+ ctx.strokeStyle='#ff454f';ctx.lineWidth=3;ctx.beginPath();vals.forEach((v,i)=>i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v)));ctx.stroke();
+ vals.forEach((v,i)=>{ctx.beginPath();ctx.arc(x(i),y(v),4,0,Math.PI*2);ctx.fillStyle='#ff454f';ctx.fill();});
+ ctx.fillStyle='#aeb2c0';ctx.textAlign='center';ctx.fillText('Recorded rounds →',w/2,h-10);
+}
+$('entryForm').addEventListener('submit',e=>{e.preventDefault();const value=Number($('multiplier').value);if(!Number.isFinite(value)||value<1){alert('Enter a multiplier of 1.00 or higher.');return;}rounds.push({value,time:new Date().toLocaleString()});save();$('multiplier').value='';render();});
+$('clear').onclick=()=>{if(confirm('Delete all saved history on this browser?')){rounds=[];save();render();}};
+$('export').onclick=()=>{const rows=[['Round','Multiplier','Recorded at'],...rounds.map((r,i)=>[i+1,r.value,r.time])];const csv=rows.map(row=>row.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='aviator-history.csv';a.click();URL.revokeObjectURL(a.href);};
+render();
+</script>
+</body>
+</html>
